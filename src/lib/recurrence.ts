@@ -1,9 +1,10 @@
-import { addDays, addMonths, addWeeks, startOfDay, isAfter, isBefore, isEqual, getDaysInMonth, setDate } from "date-fns";
+import { addDays, addMonths, startOfDay, isAfter, isBefore, isEqual, getDaysInMonth, format } from "date-fns";
 
 export type RecurrencePattern = "monthly" | "biweekly" | "weekly" | "once";
 
 export interface TransactionRule {
   id: string;
+  type: string;
   isRecurring: boolean;
   recurrencePattern?: string | null;
   dueDay?: number | null;
@@ -16,6 +17,7 @@ export interface TransactionRule {
   amount: number;
   estimatedAmount?: number | null;
   status: string;
+  categoryType?: string | null;
 }
 
 export interface Occurrence {
@@ -23,6 +25,10 @@ export interface Occurrence {
   date: Date;
   amount: number;
   isEstimated: boolean;
+}
+
+function dateKey(d: Date): string {
+  return format(d, "yyyy-MM-dd");
 }
 
 function clampDayToMonth(day: number, year: number, month: number): Date {
@@ -45,7 +51,7 @@ export function expandOccurrences(
   const inWindow = (d: Date) =>
     (isAfter(d, start) || isEqual(d, start)) && (isBefore(d, end) || isEqual(d, end));
 
-  const amount = (rule.estimatedAmount ?? rule.amount);
+  const amount = rule.estimatedAmount ?? rule.amount;
 
   // Specific-dates payment plan
   if (rule.isFinite && rule.scheduleDates && rule.scheduleDates.length > 0) {
@@ -59,7 +65,7 @@ export function expandOccurrences(
     return results;
   }
 
-  // Interval-based finite or infinite
+  // Interval-based finite
   if (rule.isFinite && rule.intervalDays) {
     if (!rule.specificDate) return [];
     let anchor = startOfDay(rule.specificDate);
@@ -68,7 +74,7 @@ export function expandOccurrences(
       if (rule.maxOccurrences && count >= rule.maxOccurrences) break;
       if (rule.endDate && isAfter(anchor, startOfDay(rule.endDate))) break;
       if (inWindow(anchor)) {
-        const key = anchor.toISOString();
+        const key = dateKey(anchor);
         const override = overrides.get(key);
         if (!override || override.status !== "skipped") {
           const d = override?.newDate ? startOfDay(override.newDate) : anchor;
@@ -77,7 +83,7 @@ export function expandOccurrences(
       }
       anchor = addDays(anchor, rule.intervalDays);
       count++;
-      if (isAfter(anchor, end) && !(rule.endDate && isBefore(rule.endDate, end))) break;
+      if (isAfter(anchor, end)) break;
     }
     return results;
   }
@@ -117,7 +123,7 @@ export function expandOccurrences(
     while (!isAfter(cursor, end)) {
       const d = clampDayToMonth(rule.dueDay, cursor.getFullYear(), cursor.getMonth());
       if (inWindow(d)) {
-        const key = d.toISOString();
+        const key = dateKey(d);
         const override = overrides.get(key);
         if (!override || override.status !== "skipped") {
           const finalDate = override?.newDate ? startOfDay(override.newDate) : d;
@@ -137,13 +143,12 @@ export function expandOccurrences(
   if ((pattern === "biweekly" || pattern === "weekly") && rule.specificDate) {
     const step = pattern === "biweekly" ? 14 : 7;
     let anchor = startOfDay(rule.specificDate);
-    // Rewind anchor to before or at window start
     while (isAfter(anchor, start)) anchor = addDays(anchor, -step);
     while (isBefore(anchor, start)) anchor = addDays(anchor, step);
 
     while (!isAfter(anchor, end)) {
       if (inWindow(anchor)) {
-        const key = anchor.toISOString();
+        const key = dateKey(anchor);
         const override = overrides.get(key);
         if (!override || override.status !== "skipped") {
           const finalDate = override?.newDate ? startOfDay(override.newDate) : anchor;

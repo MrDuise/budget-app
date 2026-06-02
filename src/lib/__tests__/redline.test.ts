@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { computeRedline, type RedlineInput } from "../redline";
+import { computeRedline } from "../redline";
 import { project } from "../projection";
 
-function makeProjection(balance: number) {
-  return project({ currentBalance: balance, rules: [], referenceDate: new Date("2024-01-01") });
+const d = (year: number, month: number, day: number) => new Date(year, month - 1, day);
+
+function makeProjection(balance: number, ref = d(2024, 1, 1)) {
+  return project({ currentBalance: balance, rules: [], referenceDate: ref });
 }
 
 describe("computeRedline", () => {
@@ -11,20 +13,19 @@ describe("computeRedline", () => {
     const result = computeRedline({
       projection: makeProjection(1000),
       recentTransactions: [],
-      referenceDate: new Date("2024-01-01"),
+      referenceDate: d(2024, 1, 1),
     });
     expect(result.redlineDate).toBeNull();
     expect(result.daysUntilRedline).toBeNull();
   });
 
   it("computes correct average daily spend", () => {
-    const ref = new Date("2024-01-15");
-    const transactions = [
-      { date: new Date("2024-01-08"), amount: 280, type: "expense" },
-    ];
+    const ref = d(2024, 1, 15);
     const result = computeRedline({
-      projection: makeProjection(1000),
-      recentTransactions: transactions,
+      projection: makeProjection(1000, ref),
+      recentTransactions: [
+        { date: d(2024, 1, 8), amount: 280, type: "expense" },
+      ],
       lookbackDays: 14,
       referenceDate: ref,
     });
@@ -32,30 +33,28 @@ describe("computeRedline", () => {
   });
 
   it("predicts redline date at correct day", () => {
-    // Balance $100, spending $20/day → hits 0 on day 5
-    const ref = new Date("2024-01-01");
-    const transactions = [
-      { date: new Date("2023-12-25"), amount: 140, type: "expense" }, // 7 days at $20/day within 14-day lookback
-    ];
+    // Balance $100, $20/day → 0 at day 5, goes negative at day 6
+    const ref = d(2024, 1, 1);
     const result = computeRedline({
-      projection: makeProjection(100),
-      recentTransactions: transactions,
+      projection: makeProjection(100, ref),
+      recentTransactions: [
+        { date: d(2023, 12, 25), amount: 140, type: "expense" }, // 7 days × $20
+      ],
       lookbackDays: 7,
       referenceDate: ref,
     });
     expect(result.averageDailySpend).toBe(20);
-    expect(result.daysUntilRedline).toBe(6); // day 0=$100, day 5=$0, day 6=-$20
+    expect(result.daysUntilRedline).toBe(6); // balance < 0 first at i=6
     expect(result.redlineDate).toBe("2024-01-07");
   });
 
   it("ignores income transactions in spend calculation", () => {
-    const ref = new Date("2024-01-15");
-    const transactions = [
-      { date: new Date("2024-01-10"), amount: 1000, type: "income" },
-    ];
+    const ref = d(2024, 1, 15);
     const result = computeRedline({
-      projection: makeProjection(500),
-      recentTransactions: transactions,
+      projection: makeProjection(500, ref),
+      recentTransactions: [
+        { date: d(2024, 1, 10), amount: 1000, type: "income" },
+      ],
       lookbackDays: 14,
       referenceDate: ref,
     });

@@ -3,70 +3,56 @@ import { expandOccurrences, type TransactionRule } from "../recurrence";
 
 const base: TransactionRule = {
   id: "t1",
+  type: "expense",
   isRecurring: true,
   isFinite: false,
   amount: 100,
   status: "pending",
 };
 
-const window = (start: string, end: string) => ({
-  start: new Date(start),
-  end: new Date(end),
-});
+// Use local midnight dates (not ISO string parsing) to avoid UTC offset issues
+const d = (year: number, month: number, day: number) => new Date(year, month - 1, day);
 
 describe("expandOccurrences", () => {
   it("returns empty for archived transactions", () => {
     const rule = { ...base, status: "archived" };
-    const { start, end } = window("2024-01-01", "2024-01-31");
-    expect(expandOccurrences(rule, start, end)).toHaveLength(0);
+    expect(expandOccurrences(rule, d(2024, 1, 1), d(2024, 1, 31))).toHaveLength(0);
   });
 
   it("monthly: generates occurrence on dueDay each month", () => {
     const rule = { ...base, recurrencePattern: "monthly", dueDay: 15 };
-    const { start, end } = window("2024-01-01", "2024-03-31");
-    const occurrences = expandOccurrences(rule, start, end);
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 3, 31));
     expect(occurrences).toHaveLength(3);
     expect(occurrences[0].date.getDate()).toBe(15);
     expect(occurrences[0].date.getMonth()).toBe(0); // January
     expect(occurrences[2].date.getMonth()).toBe(2); // March
   });
 
-  it("monthly: clamps to Feb 28 when dueDay=31", () => {
+  it("monthly: clamps to Feb 29 on leap year when dueDay=31", () => {
     const rule = { ...base, recurrencePattern: "monthly", dueDay: 31 };
-    const { start, end } = window("2024-02-01", "2024-02-29");
-    const occurrences = expandOccurrences(rule, start, end);
+    const occurrences = expandOccurrences(rule, d(2024, 2, 1), d(2024, 2, 29));
     expect(occurrences).toHaveLength(1);
     expect(occurrences[0].date.getDate()).toBe(29); // 2024 is leap year
   });
 
-  it("monthly: clamps Feb 29 on non-leap year to Feb 28", () => {
+  it("monthly: clamps to Feb 28 on non-leap year when dueDay=31", () => {
     const rule = { ...base, recurrencePattern: "monthly", dueDay: 31 };
-    const { start, end } = window("2023-02-01", "2023-02-28");
-    const occurrences = expandOccurrences(rule, start, end);
+    const occurrences = expandOccurrences(rule, d(2023, 2, 1), d(2023, 2, 28));
     expect(occurrences).toHaveLength(1);
     expect(occurrences[0].date.getDate()).toBe(28);
   });
 
   it("weekly: generates every 7 days", () => {
-    const rule = {
-      ...base,
-      recurrencePattern: "weekly",
-      specificDate: new Date("2024-01-01"),
-    };
-    const { start, end } = window("2024-01-01", "2024-01-28");
-    const occurrences = expandOccurrences(rule, start, end);
+    const rule = { ...base, recurrencePattern: "weekly", specificDate: d(2024, 1, 1) };
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 1, 28));
     expect(occurrences).toHaveLength(4);
   });
 
   it("biweekly: generates every 14 days", () => {
-    const rule = {
-      ...base,
-      recurrencePattern: "biweekly",
-      specificDate: new Date("2024-01-01"),
-    };
-    const { start, end } = window("2024-01-01", "2024-01-31");
-    const occurrences = expandOccurrences(rule, start, end);
-    expect(occurrences).toHaveLength(3); // Jan 1, Jan 15, Jan 29
+    const rule = { ...base, recurrencePattern: "biweekly", specificDate: d(2024, 1, 1) };
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 1, 31));
+    // Jan 1, Jan 15, Jan 29 = 3
+    expect(occurrences).toHaveLength(3);
   });
 
   it("once: returns single occurrence on specificDate", () => {
@@ -74,12 +60,12 @@ describe("expandOccurrences", () => {
       ...base,
       isRecurring: false,
       recurrencePattern: "once",
-      specificDate: new Date("2024-06-10"),
+      specificDate: d(2024, 6, 10),
     };
-    const { start, end } = window("2024-06-01", "2024-06-30");
-    const occurrences = expandOccurrences(rule, start, end);
+    const occurrences = expandOccurrences(rule, d(2024, 6, 1), d(2024, 6, 30));
     expect(occurrences).toHaveLength(1);
-    expect(occurrences[0].date.toISOString().slice(0, 10)).toBe("2024-06-10");
+    expect(occurrences[0].date.getDate()).toBe(10);
+    expect(occurrences[0].date.getMonth()).toBe(5); // June = month index 5
   });
 
   it("once: returns nothing if date outside window", () => {
@@ -87,48 +73,44 @@ describe("expandOccurrences", () => {
       ...base,
       isRecurring: false,
       recurrencePattern: "once",
-      specificDate: new Date("2024-07-10"),
+      specificDate: d(2024, 7, 10),
     };
-    const { start, end } = window("2024-06-01", "2024-06-30");
-    expect(expandOccurrences(rule, start, end)).toHaveLength(0);
+    expect(expandOccurrences(rule, d(2024, 6, 1), d(2024, 6, 30))).toHaveLength(0);
   });
 
   it("skips occurrences via overrides", () => {
     const rule = { ...base, recurrencePattern: "monthly", dueDay: 1 };
-    const { start, end } = window("2024-01-01", "2024-03-31");
-    const occurrenceDate = new Date("2024-02-01").toISOString();
-    const overrides = new Map([[occurrenceDate, { status: "skipped" }]]);
-    const occurrences = expandOccurrences(rule, start, end, overrides);
-    expect(occurrences).toHaveLength(2);
+    // Override key must match dateKey() format: "yyyy-MM-dd"
+    const overrides = new Map([["2024-02-01", { status: "skipped" }]]);
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 3, 31), overrides);
+    expect(occurrences).toHaveLength(2); // Jan and Mar; Feb skipped
   });
 
   it("finite interval: respects maxOccurrences", () => {
     const rule = {
       ...base,
-      isRecurring: true,
       isFinite: true,
       intervalDays: 7,
       maxOccurrences: 4,
-      specificDate: new Date("2024-01-01"),
+      specificDate: d(2024, 1, 1),
     };
-    const { start, end } = window("2024-01-01", "2024-12-31");
-    const occurrences = expandOccurrences(rule, start, end);
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 12, 31));
     expect(occurrences).toHaveLength(4);
   });
 
-  it("specific-dates plan: returns only listed dates", () => {
+  it("specific-dates plan: returns only listed dates in window", () => {
     const rule = {
       ...base,
       isFinite: true,
       scheduleDates: [
-        { date: new Date("2024-01-15"), status: "pending" },
-        { date: new Date("2024-01-30"), status: "pending" },
-        { date: new Date("2024-03-01"), status: "pending" },
+        { date: d(2024, 1, 15), status: "pending" },
+        { date: d(2024, 1, 30), status: "pending" },
+        { date: d(2024, 3, 1), status: "pending" },
       ],
     };
-    const { start, end } = window("2024-01-01", "2024-01-31");
-    const occurrences = expandOccurrences(rule, start, end);
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 1, 31));
     expect(occurrences).toHaveLength(2);
-    expect(occurrences[0].date.toISOString().slice(0, 10)).toBe("2024-01-15");
+    expect(occurrences[0].date.getDate()).toBe(15);
+    expect(occurrences[1].date.getDate()).toBe(30);
   });
 });
