@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Household & Users ───────────────────────────────────────────────────────
+
+model Household {
+  id        String   @id @default(cuid())
+  name      String   @default("My Budget")
+  createdAt DateTime @default(now())
+
+  members      HouseholdMember[]
+  accounts     Account[]
+  transactions Transaction[]
+  categories   Category[]
+  budgets      Budget[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  memberships  HouseholdMember[]
+  sessions     Session[]
+  authAccounts AuthAccount[]
+}
+
+model HouseholdMember {
+  id          String   @id @default(cuid())
+  householdId String
+  userId      String
+  role        String   @default("member")
+  inviteToken String?  @unique
+  inviteUsed  Boolean  @default(false)
+  joinedAt    DateTime @default(now())
+
+  household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  plaidItems   PlaidItem[]
+
+  @@unique([householdId, userId])
+}
+
+// ─── NextAuth Tables ─────────────────────────────────────────────────────────
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthAccount {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Accounts ────────────────────────────────────────────────────────────────
+
+model Account {
+  id             String   @id @default(cuid())
+  householdId    String
+  memberId       String?
+  name           String
+  type           String   @default("checking")
+  currentBalance Float    @default(0)
+  includeInTotal Boolean  @default(true)
+  lastUpdated    DateTime @default(now())
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  household    Household         @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  plaidAccount PlaidAccount?
+  snapshots    BalanceSnapshot[]
+  transactions Transaction[]
+}
+
+model BalanceSnapshot {
+  id        String   @id @default(cuid())
+  accountId String
+  balance   Float
+  date      DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+// ─── Transactions ─────────────────────────────────────────────────────────────
+
+model Transaction {
+  id                 String    @id @default(cuid())
+  householdId        String
+  accountId          String
+  memberId           String?
+  categoryId         String
+  name               String
+  amount             Float
+  type               String    @default("expense")
+  visibility         String    @default("personal")
+  source             String    @default("manual")
+  plaidTransactionId String?   @unique
+  isRecurring        Boolean   @default(false)
+  recurrencePattern  String?
+  dueDay             Int?
+  specificDate       DateTime?
+  isFinite           Boolean   @default(false)
+  intervalDays       Int?
+  maxOccurrences     Int?
+  endDate            DateTime?
+  status             String    @default("pending")
+  estimatedAmount    Float?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  household           Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  account             Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  member              HouseholdMember?     @relation(fields: [memberId], references: [id])
+  category            Category             @relation(fields: [categoryId], references: [id])
+  occurrenceOverrides OccurrenceOverride[]
+  scheduleDates       PaymentScheduleDate[]
+}
+
+model OccurrenceOverride {
+  id             String    @id @default(cuid())
+  transactionId  String
+  occurrenceDate DateTime
+  status         String
+  actualAmount   Float?
+  newDate        DateTime?
+  note           String?
+  createdAt      DateTime  @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId, occurrenceDate])
+}
+
+model PaymentScheduleDate {
+  id            String   @id @default(cuid())
+  transactionId String
+  date          DateTime
+  status        String   @default("pending")
+  actualAmount  Float?
+  createdAt     DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+}
+
+// ─── Categories & Budgets ────────────────────────────────────────────────────
+
+model Category {
+  id          String   @id @default(cuid())
+  householdId String
+  name        String
+  type        String   @default("VARIABLE_REGULAR")
+  color       String?
+  icon        String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  budgets      Budget[]
+}
+
+model Budget {
+  id          String   @id @default(cuid())
+  householdId String
+  categoryId  String
+  memberId    String?
+  amount      Float
+  period      String   @default("monthly")
+  createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}
+
+// ─── Plaid ───────────────────────────────────────────────────────────────────
+
+model PlaidItem {
+  id              String    @id @default(cuid())
+  memberId        String
+  accessToken     String
+  itemId          String    @unique
+  institutionName String?
+  cursor          String?
+  lastSync        DateTime?
+  createdAt       DateTime  @default(now())
+
+  member        HouseholdMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  plaidAccounts PlaidAccount[]
+}
+
+model PlaidAccount {
+  id             String  @id @default(cuid())
+  plaidItemId    String
+  plaidAccountId String  @unique
+  accountId      String? @unique
+  name           String
+  mask           String?
+  plaidType      String
+  plaidSubtype   String?
+
+  plaidItem PlaidItem @relation(fields: [plaidItemId], references: [id], onDelete: Cascade)
+  account   Account?  @relation(fields: [accountId], references: [id])
+}
