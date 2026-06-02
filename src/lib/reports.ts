@@ -89,11 +89,10 @@ export function generateReport(
     }
   }
 
-  const byCategory: CategoryReport[] = [];
-  for (const cat of categoryMap.values()) {
-    cat.overUnder = cat.budgeted - cat.spent; // positive = under budget
-    byCategory.push(cat);
-  }
+  const byCategory: CategoryReport[] = Array.from(categoryMap.values()).map((cat) => ({
+    ...cat,
+    overUnder: cat.budgeted - cat.spent, // positive = under budget
+  }));
 
   byCategory.sort((a, b) => a.overUnder - b.overUnder); // worst first
 
