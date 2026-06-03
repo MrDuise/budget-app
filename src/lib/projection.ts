@@ -49,9 +49,10 @@ export function project(input: ProjectionInput): ProjectionResult {
 
       if (rule.type === "income") {
         existing.income += occ.amount;
-      } else {
+      } else if (rule.type === "expense") {
         existing.expenses += occ.amount;
       }
+      // transfers: excluded — they move money between accounts, net balance unchanged
       dayMap.set(key, existing);
     }
   }

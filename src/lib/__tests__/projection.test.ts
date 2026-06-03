@@ -90,4 +90,51 @@ describe("project", () => {
     expect(result.balanceAt14).toBe(result.days[14].balance);
     expect(result.balanceAt30).toBe(result.days[30].balance);
   });
+
+  it("income and expense on the same day net correctly", () => {
+    const income = makeRule({
+      id: "inc",
+      recurrencePattern: "once",
+      specificDate: d(2024, 1, 5),
+      amount: 3000,
+      type: "income",
+    });
+    const expense = makeRule({
+      id: "exp",
+      recurrencePattern: "once",
+      specificDate: d(2024, 1, 5),
+      amount: 500,
+      type: "expense",
+    });
+    const result = project({ currentBalance: 100, rules: [income, expense], referenceDate: d(2024, 1, 1) });
+    const day5 = result.days.find((d) => d.date === "2024-01-05")!;
+    expect(day5.income).toBe(3000);
+    expect(day5.expenses).toBe(500);
+    expect(day5.balance).toBe(2600); // 100 + 3000 - 500
+  });
+
+  it("transfer type does not affect running balance", () => {
+    const transfer = makeRule({
+      id: "tr",
+      recurrencePattern: "once",
+      specificDate: d(2024, 1, 5),
+      amount: 500,
+      type: "transfer",
+    });
+    const result = project({ currentBalance: 1000, rules: [transfer], referenceDate: d(2024, 1, 1) });
+    const day5 = result.days.find((d) => d.date === "2024-01-05")!;
+    expect(day5.balance).toBe(1000); // unchanged — transfers don't affect total balance
+  });
+
+  it("multiple expenses compound day by day", () => {
+    const rules = [
+      makeRule({ id: "e1", recurrencePattern: "once", specificDate: d(2024, 1, 2), amount: 100, type: "expense" }),
+      makeRule({ id: "e2", recurrencePattern: "once", specificDate: d(2024, 1, 4), amount: 200, type: "expense" }),
+      makeRule({ id: "e3", recurrencePattern: "once", specificDate: d(2024, 1, 6), amount: 50, type: "expense" }),
+    ];
+    const result = project({ currentBalance: 1000, rules, referenceDate: d(2024, 1, 1) });
+    expect(result.days.find((d) => d.date === "2024-01-02")!.balance).toBe(900);
+    expect(result.days.find((d) => d.date === "2024-01-04")!.balance).toBe(700);
+    expect(result.days.find((d) => d.date === "2024-01-06")!.balance).toBe(650);
+  });
 });

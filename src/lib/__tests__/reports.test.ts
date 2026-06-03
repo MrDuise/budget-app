@@ -82,4 +82,40 @@ describe("generateReport", () => {
     expect(result.backOnTrackAmount).toBe(0);
     expect(result.backOnTrackDescription).toContain("On track");
   });
+
+  it("transfer type is excluded from income and expense totals", () => {
+    const transactions = [
+      tx("1", 500, "income", "salary", d(2024, 1, 15)),
+      tx("2", 200, "expense", "groceries", d(2024, 1, 10)),
+      tx("3", 1000, "transfer", "savings", d(2024, 1, 20)),
+    ];
+    const result = generateReport(transactions, [], d(2024, 1, 1), d(2024, 1, 31));
+    expect(result.totalIncome).toBe(500);
+    expect(result.totalExpenses).toBe(200);
+  });
+
+  it("category with budget but zero spending shows positive overUnder", () => {
+    const transactions: ReturnType<typeof tx>[] = [];
+    const budgets: BudgetLimit[] = [{ categoryId: "savings", amount: 200 }];
+    const result = generateReport(transactions, budgets, d(2024, 1, 1), d(2024, 1, 31));
+    const cat = result.byCategory.find((c) => c.categoryId === "savings")!;
+    expect(cat.spent).toBe(0);
+    expect(cat.budgeted).toBe(200);
+    expect(cat.overUnder).toBe(200); // fully under budget
+  });
+
+  it("byCategory sorted worst-first (most over budget first)", () => {
+    const transactions = [
+      tx("1", 300, "expense", "dining", d(2024, 1, 10)),   // over by 200
+      tx("2", 110, "expense", "groceries", d(2024, 1, 12)), // over by 10
+    ];
+    const budgets: BudgetLimit[] = [
+      { categoryId: "dining", amount: 100 },
+      { categoryId: "groceries", amount: 100 },
+    ];
+    const result = generateReport(transactions, budgets, d(2024, 1, 1), d(2024, 1, 31));
+    expect(result.byCategory[0].categoryId).toBe("dining");   // worst first
+    expect(result.byCategory[0].overUnder).toBe(-200);
+    expect(result.byCategory[1].categoryId).toBe("groceries");
+  });
 });

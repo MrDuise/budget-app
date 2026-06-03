@@ -113,4 +113,60 @@ describe("expandOccurrences", () => {
     expect(occurrences[0].date.getDate()).toBe(15);
     expect(occurrences[1].date.getDate()).toBe(30);
   });
+
+  it("override with actualAmount: returned occurrence uses override amount", () => {
+    const rule = { ...base, recurrencePattern: "monthly", dueDay: 1 };
+    const overrides = new Map([["2024-01-01", { status: "paid", actualAmount: 143 }]]);
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 1, 31), overrides);
+    expect(occurrences).toHaveLength(1);
+    expect(occurrences[0].amount).toBe(143);
+  });
+
+  it("override with newDate: returned occurrence uses newDate", () => {
+    const rule = { ...base, recurrencePattern: "monthly", dueDay: 1 };
+    const newDate = d(2024, 1, 5);
+    const overrides = new Map([["2024-01-01", { status: "paid", newDate }]]);
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 1, 31), overrides);
+    expect(occurrences).toHaveLength(1);
+    expect(occurrences[0].date.getDate()).toBe(5);
+  });
+
+  it("estimatedAmount: occurrences use estimatedAmount and mark isEstimated", () => {
+    const rule = {
+      ...base,
+      recurrencePattern: "monthly",
+      dueDay: 15,
+      amount: 100,
+      estimatedAmount: 120,
+    };
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 1, 31));
+    expect(occurrences[0].amount).toBe(120);
+    expect(occurrences[0].isEstimated).toBe(true);
+  });
+
+  it("finite interval with endDate: stops at endDate even without maxOccurrences", () => {
+    const rule = {
+      ...base,
+      isFinite: true,
+      intervalDays: 7,
+      specificDate: d(2024, 1, 1),
+      endDate: d(2024, 1, 22), // allows Jan 1, 8, 15, 22 = 4 occurrences
+    };
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 12, 31));
+    expect(occurrences).toHaveLength(4);
+    expect(occurrences[3].date.getDate()).toBe(22);
+  });
+
+  it("non-standard infinite interval: generates on custom cadence", () => {
+    const rule = {
+      ...base,
+      isRecurring: false,
+      intervalDays: 10,
+      specificDate: d(2024, 1, 1),
+    };
+    // Jan 1, 11, 21, 31 = 4 in Jan
+    const occurrences = expandOccurrences(rule, d(2024, 1, 1), d(2024, 1, 31));
+    expect(occurrences).toHaveLength(4);
+    expect(occurrences[1].date.getDate()).toBe(11);
+  });
 });

@@ -59,6 +59,8 @@ export function generateReport(
       continue;
     }
 
+    if (t.type !== "expense") continue; // transfers excluded from totals
+
     totalExpenses += t.amount;
 
     const existing = categoryMap.get(t.categoryId) ?? {

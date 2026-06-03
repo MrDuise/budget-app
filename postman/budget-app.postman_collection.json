@@ -1,0 +1,785 @@
+{
+  "info": {
+    "name": "Budget App API",
+    "_postman_id": "budget-app-v1",
+    "description": "Complete API collection for the household budget app.\n\n## Setup\n1. Run `npm run dev` (app at http://localhost:3000)\n2. Run `npm run db:seed` if no data exists yet\n3. Import this collection into Postman\n4. Run the **🔐 Auth** folder first — it stores your session cookie automatically\n5. Run remaining folders in order (each builds on IDs captured by earlier requests)\n\n## Seed credentials\n- Email: test@example.com\n- Password: password123",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "email", "value": "test@example.com" },
+    { "key": "password", "value": "password123" },
+    { "key": "csrfToken", "value": "" },
+    { "key": "accountId", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "customCategoryId", "value": "" },
+    { "key": "txId", "value": "" },
+    { "key": "recurringTxId", "value": "" },
+    { "key": "planTxId", "value": "" },
+    { "key": "budgetLimitId", "value": "" },
+    { "key": "inviteToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "1. Get CSRF Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/auth/csrf", "host": ["{{baseUrl}}"], "path": ["api", "auth", "csrf"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('csrfToken', data.csrfToken);",
+                  "pm.test('Got CSRF token', () => pm.expect(data.csrfToken).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "csrfToken", "value": "{{csrfToken}}" },
+                { "key": "email", "value": "{{email}}" },
+                { "key": "password", "value": "{{password}}" },
+                { "key": "redirect", "value": "false" },
+                { "key": "json", "value": "true" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/callback/credentials", "host": ["{{baseUrl}}"], "path": ["api", "auth", "callback", "credentials"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login succeeded (session cookie set)', () => {",
+                  "  const cookies = pm.cookies.toObject();",
+                  "  const hasSession = Object.keys(cookies).some(k => k.includes('session-token') || k.includes('authjs'));",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 302]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "📁 Accounts",
+      "item": [
+        {
+          "name": "Create Account",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Checking\",\n  \"type\": \"checking\",\n  \"currentBalance\": 2500,\n  \"includeInTotal\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/accounts", "host": ["{{baseUrl}}"], "path": ["api", "accounts"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('accountId', data.id);",
+                  "pm.test('Has id', () => pm.expect(data.id).to.be.a('string'));",
+                  "pm.test('Balance set', () => pm.expect(data.currentBalance).to.eql(2500));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Accounts",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/accounts", "host": ["{{baseUrl}}"], "path": ["api", "accounts"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Account",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}", "host": ["{{baseUrl}}"], "path": ["api", "accounts", "{{accountId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Correct id', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('accountId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Account Balance",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"currentBalance\": 3200,\n  \"notes\": \"Updated after paycheck\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}", "host": ["{{baseUrl}}"], "path": ["api", "accounts", "{{accountId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Balance updated', () => pm.expect(pm.response.json().currentBalance).to.eql(3200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🏷️ Categories",
+      "item": [
+        {
+          "name": "List Categories",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/categories", "host": ["{{baseUrl}}"], "path": ["api", "categories"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const cats = pm.response.json();",
+                  "pm.test('Has categories', () => pm.expect(cats.length).to.be.greaterThan(0));",
+                  "if (cats.length > 0) pm.collectionVariables.set('categoryId', cats[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Custom Category",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Pet Expenses\",\n  \"type\": \"VARIABLE_REGULAR\",\n  \"color\": \"#f59e0b\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/categories", "host": ["{{baseUrl}}"], "path": ["api", "categories"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('customCategoryId', data.id);",
+                  "pm.test('Not system', () => pm.expect(data.isSystem).to.be.false);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Pet Care\",\n  \"color\": \"#10b981\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/categories/{{customCategoryId}}", "host": ["{{baseUrl}}"], "path": ["api", "categories", "{{customCategoryId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Name updated', () => pm.expect(pm.response.json().name).to.eql('Pet Care'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Custom Category (no transactions)",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/categories/{{customCategoryId}}", "host": ["{{baseUrl}}"], "path": ["api", "categories", "{{customCategoryId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "💸 Transactions",
+      "item": [
+        {
+          "name": "Create One-Time Expense",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{accountId}}\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"name\": \"Dentist visit\",\n  \"amount\": 180,\n  \"type\": \"expense\",\n  \"isRecurring\": false,\n  \"recurrencePattern\": \"once\",\n  \"specificDate\": \"{{$isoTimestamp}}\",\n  \"notes\": \"Annual checkup\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/transactions", "host": ["{{baseUrl}}"], "path": ["api", "transactions"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('txId', data.id);",
+                  "pm.test('Amount correct', () => pm.expect(data.amount).to.eql(180));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Monthly Recurring Expense",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{accountId}}\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"name\": \"Rent\",\n  \"amount\": 1200,\n  \"type\": \"expense\",\n  \"isRecurring\": true,\n  \"recurrencePattern\": \"monthly\",\n  \"dueDay\": 1,\n  \"visibility\": \"personal\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/transactions", "host": ["{{baseUrl}}"], "path": ["api", "transactions"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('recurringTxId', data.id);",
+                  "pm.test('Is recurring', () => pm.expect(data.isRecurring).to.be.true);",
+                  "pm.test('Due day 1', () => pm.expect(data.dueDay).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Payment Plan (4 weekly payments)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{accountId}}\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"name\": \"Couch installments\",\n  \"amount\": 50,\n  \"type\": \"expense\",\n  \"isRecurring\": true,\n  \"isFinite\": true,\n  \"intervalDays\": 7,\n  \"maxOccurrences\": 4,\n  \"specificDate\": \"2025-01-01T00:00:00.000Z\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/transactions", "host": ["{{baseUrl}}"], "path": ["api", "transactions"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('planTxId', data.id);",
+                  "pm.test('Is finite', () => pm.expect(data.isFinite).to.be.true);",
+                  "pm.test('4 occurrences', () => pm.expect(data.maxOccurrences).to.eql(4));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Income (Paycheck)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{accountId}}\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"name\": \"Paycheck\",\n  \"amount\": 3500,\n  \"type\": \"income\",\n  \"isRecurring\": true,\n  \"recurrencePattern\": \"biweekly\",\n  \"specificDate\": \"2025-01-03T00:00:00.000Z\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/transactions", "host": ["{{baseUrl}}"], "path": ["api", "transactions"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Type income', () => pm.expect(pm.response.json().type).to.eql('income'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Transactions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions?type=expense",
+              "host": ["{{baseUrl}}"], "path": ["api", "transactions"],
+              "query": [{ "key": "type", "value": "expense" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Transaction",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/transactions/{{txId}}", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "{{txId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Correct id', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('txId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Transaction",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"notes\": \"Paid in full at checkout\",\n  \"amount\": 195\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transactions/{{txId}}", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "{{txId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Amount updated', () => pm.expect(pm.response.json().amount).to.eql(195));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Skip an Occurrence (Rent Feb)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"occurrenceDate\": \"2025-02-01T00:00:00.000Z\",\n  \"note\": \"Landlord gave extension\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transactions/{{recurringTxId}}/skip", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "{{recurringTxId}}", "skip"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status skipped', () => pm.expect(pm.response.json().status).to.eql('skipped'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pay an Occurrence (Rent Jan, actual amount)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"occurrenceDate\": \"2025-01-01T00:00:00.000Z\",\n  \"actualAmount\": 1175,\n  \"note\": \"Landlord gave small discount\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transactions/{{recurringTxId}}/pay", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "{{recurringTxId}}", "pay"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status paid', () => pm.expect(pm.response.json().status).to.eql('paid'));",
+                  "pm.test('Actual amount stored', () => pm.expect(pm.response.json().actualAmount).to.eql(1175));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete One-Time Transaction",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/transactions/{{txId}}", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "{{txId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "💰 Budget Limits",
+      "item": [
+        {
+          "name": "Set Budget Limit",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"categoryId\": \"{{categoryId}}\",\n  \"amount\": 150,\n  \"period\": \"monthly\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/budget-limits", "host": ["{{baseUrl}}"], "path": ["api", "budget-limits"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('budgetLimitId', data.id);",
+                  "pm.test('Budget created/updated', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "pm.test('Amount correct', () => pm.expect(data.amount).to.eql(150));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Budget Limits",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/budget-limits", "host": ["{{baseUrl}}"], "path": ["api", "budget-limits"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Budget Limit",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 200\n}" },
+            "url": { "raw": "{{baseUrl}}/api/budget-limits/{{budgetLimitId}}", "host": ["{{baseUrl}}"], "path": ["api", "budget-limits", "{{budgetLimitId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Amount updated', () => pm.expect(pm.response.json().amount).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Budget Limit",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/budget-limits/{{budgetLimitId}}", "host": ["{{baseUrl}}"], "path": ["api", "budget-limits", "{{budgetLimitId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "📊 Analytics",
+      "item": [
+        {
+          "name": "Projection (60 days)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/projection?days=60",
+              "host": ["{{baseUrl}}"], "path": ["api", "projection"],
+              "query": [{ "key": "days", "value": "60" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Has days array', () => pm.expect(data.days).to.be.an('array'));",
+                  "pm.test('Has 61 days (today + 60)', () => pm.expect(data.days.length).to.eql(61));",
+                  "pm.test('Has balanceAt7', () => pm.expect(data.balanceAt7).to.be.a('number'));",
+                  "pm.test('Has overdraftDays', () => pm.expect(data.overdraftDays).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Daily Allowance",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/allowance", "host": ["{{baseUrl}}"], "path": ["api", "allowance"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Has dailyAllowance', () => pm.expect(data.dailyAllowance).to.be.a('number'));",
+                  "pm.test('Has daysRemaining', () => pm.expect(data.daysRemaining).to.be.a('number'));",
+                  "pm.test('dailyAllowance non-negative', () => pm.expect(data.dailyAllowance).to.be.at.least(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Budget Report (this month)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/budget", "host": ["{{baseUrl}}"], "path": ["api", "budget"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Has totalIncome', () => pm.expect(data.totalIncome).to.be.a('number'));",
+                  "pm.test('Has totalExpenses', () => pm.expect(data.totalExpenses).to.be.a('number'));",
+                  "pm.test('Has byCategory', () => pm.expect(data.byCategory).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Budget Report (specific month)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/budget?month=2025-01",
+              "host": ["{{baseUrl}}"], "path": ["api", "budget"],
+              "query": [{ "key": "month", "value": "2025-01" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('From Jan 2025', () => pm.expect(pm.response.json().from).to.include('2025-01'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "History Report (date range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/history?from=2025-01-01&to=2025-01-31",
+              "host": ["{{baseUrl}}"], "path": ["api", "history"],
+              "query": [
+                { "key": "from", "value": "2025-01-01" },
+                { "key": "to", "value": "2025-01-31" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Has transactions array', () => pm.expect(data.transactions).to.be.an('array'));",
+                  "pm.test('Has byCategory', () => pm.expect(data.byCategory).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "History Report (missing required params → 400)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/history", "host": ["{{baseUrl}}"], "path": ["api", "history"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 when from/to missing', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "📨 Invite",
+      "item": [
+        {
+          "name": "Generate Invite Link",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/invite", "host": ["{{baseUrl}}"], "path": ["api", "invite"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('inviteToken', data.token);",
+                  "pm.test('Has token', () => pm.expect(data.token).to.be.a('string'));",
+                  "pm.test('Has url', () => pm.expect(data.url).to.include('/invite/'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Validate Invite Token",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/invite/{{inviteToken}}", "host": ["{{baseUrl}}"], "path": ["api", "invite", "{{inviteToken}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Token is valid', () => pm.expect(data.valid).to.be.true);",
+                  "pm.test('Has householdName', () => pm.expect(data.householdName).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Validate Invalid Token → not valid",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/invite/not-a-real-token-abc123", "host": ["{{baseUrl}}"], "path": ["api", "invite", "not-a-real-token-abc123"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Not valid', () => pm.expect(pm.response.json().valid).to.be.false);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔒 Auth Guards",
+      "item": [
+        {
+          "name": "Unauthenticated → 401 (accounts)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "", "description": "Intentionally empty — tests that auth guard works" }],
+            "url": { "raw": "{{baseUrl}}/api/accounts", "host": ["{{baseUrl}}"], "path": ["api", "accounts"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 401 without session', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
