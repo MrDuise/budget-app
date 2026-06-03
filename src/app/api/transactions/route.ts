@@ -72,6 +72,17 @@ export async function POST(req: Request) {
     const { scheduleDates, specificDate, endDate, ...rest } = body;
 
     const transaction = await db.$transaction(async (tx) => {
+      const account = await tx.account.findFirst({ where: { id: rest.accountId, householdId } });
+      if (!account) throw Object.assign(new Error("Account not found"), { status: 400 });
+
+      const category = await tx.category.findFirst({ where: { id: rest.categoryId, householdId } });
+      if (!category) throw Object.assign(new Error("Category not found"), { status: 400 });
+
+      if (rest.memberId) {
+        const member = await tx.householdMember.findFirst({ where: { id: rest.memberId, householdId } });
+        if (!member) throw Object.assign(new Error("Member not found"), { status: 400 });
+      }
+
       const created = await tx.transaction.create({
         data: {
           ...rest,

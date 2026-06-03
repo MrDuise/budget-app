@@ -11,7 +11,6 @@ export async function POST() {
     const member = await db.householdMember.create({
       data: {
         householdId,
-        userId: "pending", // will be replaced when the invite is accepted
         role: "member",
         inviteToken: token,
         inviteUsed: false,

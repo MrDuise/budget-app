@@ -36,18 +36,16 @@ model User {
 model HouseholdMember {
   id          String   @id @default(cuid())
   householdId String
-  userId      String
+  userId      String?
   role        String   @default("member")
   inviteToken String?  @unique
   inviteUsed  Boolean  @default(false)
   joinedAt    DateTime @default(now())
 
   household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
   plaidItems   PlaidItem[]
-
-  @@unique([householdId, userId])
 }
 
 // ─── NextAuth Tables ─────────────────────────────────────────────────────────
